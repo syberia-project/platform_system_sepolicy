@@ -319,6 +319,7 @@ neverallow {
   -kernel
   -init
   -recovery
+  -update_engine
   -ueventd
   -healthd
   -uncrypt
@@ -485,6 +486,7 @@ neverallow { domain -init } properties_serial:file { no_w_file_perms no_x_file_p
 # and invalidate dm-verity signatures.
 neverallow {
     domain
+    -update_engine
     with_asan(`-asan_extract')
 } {
     system_file
@@ -496,10 +498,9 @@ neverallow { domain -kernel -update_engine with_asan(`-asan_extract') } { system
 
 # Don't allow mounting on top of /system files or directories
 neverallow * exec_type:dir_file_class_set mounton;
-neverallow { domain -init } { system_file vendor_file_type }:dir_file_class_set mounton;
+neverallow { domain -init -update_engine } { system_file vendor_file_type }:dir_file_class_set mounton;
 
 # Nothing should be writing to files in the rootfs.
-neverallow { domain userdebug_or_eng(`-recovery -update_engine') } rootfs:file { create write setattr relabelto append unlink link rename };
 neverallow { -update_engine } rootfs:file { create write setattr relabelto append unlink link rename };
 
 # Restrict context mounts to specific types marked with
@@ -1367,8 +1368,9 @@ neverallow {
   -vold
   -vold_prepare_subdirs
   -zygote
+  -update_engine
 } self:capability dac_override;
-neverallow { domain -traced_probes } self:capability dac_read_search;
+neverallow { domain -update_engine -traced_probes } self:capability dac_read_search;
 
 # cgroupfs directories can be created, but not files within them.
 neverallow domain cgroup:file create;
