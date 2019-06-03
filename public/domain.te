@@ -181,7 +181,7 @@ allow domain vndk_sp_file:file { execute read open getattr map };
 
 # All domains get access to /vendor/etc
 allow domain vendor_configs_file:dir r_dir_perms;
-allow domain vendor_configs_file:file { read open getattr };
+allow domain vendor_configs_file:file { read open getattr map };
 
 full_treble_only(`
     # Allow all domains to be able to follow /system/vendor and/or
@@ -262,7 +262,7 @@ allow domain fs_type:dir getattr;
 # defaults for all processes. Note that granting this whitelist to domain does
 # not grant the ioctl permission on these socket types. That must be granted
 # separately.
-allowxperm domain domain:{ rawip_socket tcp_socket udp_socket }
+allowxperm domain domain:{ icmp_socket rawip_socket tcp_socket udp_socket }
   ioctl { unpriv_sock_ioctls unpriv_tty_ioctls };
 # default whitelist for unix sockets.
 allowxperm domain domain:{ unix_dgram_socket unix_stream_socket }
@@ -825,7 +825,7 @@ full_treble_only(`
   } {
     data_file_type
     -core_data_file_type
-  }:file_class_set ~{ append getattr ioctl read write };
+  }:file_class_set ~{ append getattr ioctl read write map };
 ')
 full_treble_only(`
   neverallow {
@@ -857,7 +857,7 @@ full_treble_only(`
     # files in /data/misc/zoneinfo/tzdata file. These functions are considered
     # vndk-stable and thus must be allowed for all processes.
     -zoneinfo_data_file
-  }:file_class_set ~{ append getattr ioctl read write };
+  }:file_class_set ~{ append getattr ioctl read write map };
   neverallow {
     vendor_init
     -data_between_core_and_vendor_violators
@@ -865,7 +865,7 @@ full_treble_only(`
     core_data_file_type
     -unencrypted_data_file
     -zoneinfo_data_file
-  }:file_class_set ~{ append getattr ioctl read write };
+  }:file_class_set ~{ append getattr ioctl read write map };
   # vendor init needs to be able to read unencrypted_data_file to create directories with FBE.
   # The vendor init binary lives on the system partition so there is not a concern with stability.
   neverallow vendor_init unencrypted_data_file:file ~r_file_perms;
@@ -931,7 +931,7 @@ full_treble_only(`
     -init
     } {
       vendor_data_file # default label for files on /data/vendor{,_ce,_de}.
-    }:file_class_set ~{ append getattr ioctl read write };
+    }:file_class_set ~{ append getattr ioctl read write map };
 ')
 
 # On TREBLE devices, a limited set of files in /vendor are accessible to
@@ -1042,7 +1042,10 @@ full_treble_only(`
       -otapreopt_slot
       -shell
       -system_executes_vendor_violators
-    } vendor_file_type:file execute_no_trans;
+    } {
+      vendor_file_type
+      -same_process_hal_file
+    }:file execute_no_trans;
 ')
 
 # Only authorized processes should be writing to files in /data/dalvik-cache
@@ -1354,31 +1357,49 @@ full_treble_only(`
 # Minimize dac_override and dac_read_search.
 # Instead of granting them it is usually better to add the domain to
 # a Unix group or change the permissions of a file.
-neverallow {
-  -domain
-  -dnsmasq
-  -dumpstate
-  -init
-  -installd
-  -install_recovery
-  -lmkd
-  -netd
-  -otapreopt_slot
-  -perfprofd
-  -postinstall_dexopt
-  -recovery
-  -sdcardd
-  -thermalserviced
-  -tee
-  -ueventd
-  -uncrypt
-  -vendor_init
-  -vold
-  -vold_prepare_subdirs
-  -zygote
-  -update_engine
-} self:capability dac_override;
-neverallow { domain -update_engine -traced_probes } self:capability dac_read_search;
+define(`dac_override_allowed', `{
+  dnsmasq
+  dumpstate
+  init
+  installd
+  install_recovery
+  lmkd
+  netd
+  perfprofd
+  postinstall_dexopt
+  recovery
+  sdcardd
+  tee
+  ueventd
+  uncrypt
+  vendor_init
+  vold
+  vold_prepare_subdirs
+  zygote
+}')
+neverallow ~dac_override_allowed self:global_capability_class_set dac_override;
+# Since the kernel checks dac_read_search before dac_override, domains that
+# have dac_override should also have dac_read_search to eliminate spurious
+# denials.  Some domains have dac_read_search without having dac_override, so
+# this list should be a superset of the one above.
+neverallow ~{
+  dac_override_allowed
+  traced_probes
+} self:global_capability_class_set dac_read_search;
+
+# If an already existing file is opened with O_CREAT, the kernel might generate
+# a false report of a create denial. Silence these denials and make sure that
+# inappropriate permissions are not granted.
+
+# These filesystems don't allow files or directories to be created, so the permission
+# to do so should never be granted.
+neverallow domain {
+  proc_type
+  sysfs_type
+}:dir { add_name create link remove_name rename reparent rmdir write };
+
+# cgroupfs directories can be created, but not files within them.
+neverallow domain cgroup:file create;
 
 dontaudit domain proc_type:dir write;
 dontaudit domain sysfs_type:dir write;
@@ -1399,4 +1420,12 @@ neverallow {
   -init
   -ueventd
   -charger
+  -vold
+  -system_writes_mnt_vendor_violators
 } mnt_vendor_file:dir *;
+
+# Vendor domian must not have access to /mnt/product.
+neverallow {
+  domain
+  -coredomain
+} mnt_product_file:dir *;
