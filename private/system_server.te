@@ -548,6 +548,9 @@ set_prop(system_server, firstboot_prop)
 # such as camera shutter enforcement
 get_prop(system_server, exported_audio_prop)
 
+# Allow getting cpu varient
+get_prop(system_server, cpu_variant_prop)
+
 # Create a socket for connections from debuggerd.
 allow system_server system_ndebug_socket:sock_file create_file_perms;
 

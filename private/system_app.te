@@ -140,6 +140,9 @@ allow system_app system_server:udp_socket {
 # Read selinux status
 allow system_app selinuxfs:file r_file_perms;
 
+# Allow cpu_variant_prop
+allow system_app cpu_variant_prop:file r_file_perms;
+
 ###
 ### Neverallow rules
 ###
