@@ -143,6 +143,9 @@ get_prop(zygote, device_config_runtime_native_boot_prop)
 # ingore spurious denials
 dontaudit zygote self:global_capability_class_set sys_resource;
 
+# Send unsolicited message to system_server
+unix_socket_send(zygote, system_unsolzygote, system_server)
+
 ###
 ### neverallow rules
 ###
